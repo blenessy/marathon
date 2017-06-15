@@ -16,7 +16,27 @@ val PACKAGE_DIR: Path = pwd / 'target / 'universal
  */
 @main
 def compileAndTest(): Unit = utils.stage("Compile and Test") {
-  %('sbt, 'clean, 'test, "integration:test", 'scapegoat)
+  val builder = new java.lang.ProcessBuilder()
+  val buildProcess = builder
+    .directory(new java.io.File(pwd.toString))
+    .command("sbt", "clean", "test", "integration:test", "scapegoat")
+    .inheritIO()
+    .start()
+
+  try {
+    val exited = buildProcess.waitFor(1, java.util.concurrent.TimeUnit.HOURS)
+
+    if (exited) {
+      if(buildProcess.exitValue != 0) throw new InteractiveShelloutException()
+    } else {
+      // The process timed out. Try to kill it.
+      buildProcess.destroyForcibly().waitFor()
+      throw new java.util.concurrent.TimeoutException("Compile and test timed out.")
+    }
+  } finally {
+    // This also cleans forked SBT processes.
+    provision.killStaleTestProcesses()
+  }
 }
 
 @main
